@@ -11,7 +11,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.GraphicsLayerScope
@@ -43,12 +42,14 @@ fun rememberNativeViewBackdrop(
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val backdrop = remember(graphicsLayer) { NativeViewBackdrop(graphicsLayer) }
-    val currentOnHostPreDraw by rememberUpdatedState(onHostPreDraw)
-    backdrop.update(sourceView, redrawNativeText, density, layoutDirection)
+    backdrop.sourceView = sourceView
+    backdrop.redrawNativeText = redrawNativeText
+    backdrop.density = density
+    backdrop.layoutDirection = layoutDirection
 
-    DisposableEffect(sourceView) {
+    DisposableEffect(sourceView, onHostPreDraw) {
         val listener = ViewTreeObserver.OnPreDrawListener {
-            currentOnHostPreDraw()
+            onHostPreDraw()
             if (sourceView.isDirty) backdrop.bumpVersion()
             true
         }
@@ -56,7 +57,6 @@ fun rememberNativeViewBackdrop(
         onDispose {
             val observer = sourceView.viewTreeObserver
             if (observer.isAlive) observer.removeOnPreDrawListener(listener)
-            backdrop.dispose()
         }
     }
     return backdrop
@@ -66,48 +66,22 @@ fun rememberNativeViewBackdrop(
 class NativeViewBackdrop internal constructor(
     private val graphicsLayer: GraphicsLayer
 ) : Backdrop {
-    private var sourceView: View? = null
-    private var redrawNativeText: Boolean = false
-    private var density: Density = Density(1f)
-    private var layoutDirection: LayoutDirection = LayoutDirection.Ltr
+    internal var sourceView: View? = null
+    internal var redrawNativeText: Boolean = false
+    internal var density: Density = Density(1f)
+    internal var layoutDirection: LayoutDirection = LayoutDirection.Ltr
     private var version by mutableIntStateOf(0)
-    private var sourceNeedsRecording = true
     private val composeSnapshots = IdentityHashMap<View, android.graphics.Bitmap>()
 
     override val isCoordinatesDependent: Boolean = true
 
-    internal fun update(
-        sourceView: View,
-        redrawNativeText: Boolean,
-        density: Density,
-        layoutDirection: LayoutDirection,
-    ) {
-        if (this.sourceView !== sourceView ||
-            this.redrawNativeText != redrawNativeText ||
-            this.density != density ||
-            this.layoutDirection != layoutDirection
-        ) {
-            sourceNeedsRecording = true
-        }
-        this.sourceView = sourceView
-        this.redrawNativeText = redrawNativeText
-        this.density = density
-        this.layoutDirection = layoutDirection
-    }
-
     internal fun bumpVersion() {
         version++
-        sourceNeedsRecording = true
-    }
-
-    internal fun dispose() {
-        composeSnapshots.values.forEach { bitmap -> bitmap.recycle() }
-        composeSnapshots.clear()
     }
 
     private fun recordSource() {
         val source = sourceView ?: return
-        if (!sourceNeedsRecording || source.width <= 0 || source.height <= 0) return
+        if (source.width <= 0 || source.height <= 0) return
         graphicsLayer.record(density, layoutDirection, IntSize(source.width, source.height)) {
             drawIntoCanvas { canvas ->
                 val native = canvas.nativeCanvas
@@ -121,7 +95,6 @@ class NativeViewBackdrop internal constructor(
                 }
             }
         }
-        sourceNeedsRecording = false
     }
 
     private fun redrawTextViews(canvas: android.graphics.Canvas, source: View) {
