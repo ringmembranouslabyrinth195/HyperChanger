@@ -1,0 +1,49 @@
+# Gradle files
+.gradle/
+**/build/
+
+# Local configuration
+local.properties
+
+# IDE files
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Build outputs and profiling data
+*.apk
+*.aab
+*.hprof
+output-metadata.json
+
+# Keystores and service configuration
+*.jks
+*.keystore
+google-services.json
+
+# Logs and OS files
+*.log
+hs_err_pid*.log
+.DS_Store
+Thumbs.db
+
+# Local APK inspection and reverse-engineering workspaces
+.api-inspect/
+.jadx*/
+.miuix-inspect/
+.plugin-jadx/
+.target-analysis/
+analysis/
+hyperos4-glass-blur-main/
+/.jadx.zip
+
+# Device captures and extracted system packages kept only for local analysis
+/*.png
+/*.jpg
+/*.jpeg
+/*.xml
+/*.apk
+/*.aar
+/*.resources.txt
