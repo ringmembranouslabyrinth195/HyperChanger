@@ -24,6 +24,7 @@ private enum class NotificationMaterialType { NORMAL, MEDIA, FOCUS }
 
 class HyperSystemUiModule : XposedModule() {
     override fun onPackageLoaded(param: PackageLoadedParam) {
+        if (param.packageName !in SYSTEM_UI_TARGETS) return
         runCatching {
             val preferences = getRemotePreferences(REMOTE_PREFERENCE_GROUP)
             when (param.packageName) {
@@ -83,10 +84,7 @@ class HyperSystemUiModule : XposedModule() {
                         depthEffectHookInstalled = true
                     }
                 }
-                else -> {
-                    detach()
-                    return
-                }
+                else -> return
             }
             log(Log.INFO, TAG, "Installed hooks for ${param.packageName}")
         }.onFailure { error ->
@@ -455,9 +453,10 @@ class HyperSystemUiModule : XposedModule() {
                 .setId("shade-notification-glass-material")
                 .intercept { chain ->
                     val original = chain.getArg(0) as? FloatArray
+                    val view = chain.thisObject as? View
                     val controlCenter = isControlCenterCall()
                     val notification = isNotificationCenterCall()
-                    val tuning = elementMaterialOverride(preferences, controlCenter, notification)
+                    val tuning = elementMaterialOverride(preferences, view, controlCenter, notification)
                     if (original != null && original.size >= MIN_GLASS_PARAMS_SIZE && tuning?.enabled == true) {
                         chain.proceedWith(chain.thisObject, arrayOf(applyMaterialOverride(original, tuning)))
                     } else {
@@ -474,8 +473,10 @@ class HyperSystemUiModule : XposedModule() {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .setId("shade-notification-glass-radius")
                 .intercept { chain ->
+                    val view = chain.thisObject as? View
                     val tuning = elementMaterialOverride(
                         preferences,
+                        view,
                         isControlCenterCall(),
                         isNotificationCenterCall(),
                     )
@@ -508,6 +509,32 @@ class HyperSystemUiModule : XposedModule() {
                     val result = chain.proceed()
                     (chain.thisObject as? View)?.let { view ->
                         requestNotificationRowGlass(view, preferences, "background")
+                    }
+                    result
+                }
+
+            // Keyguard keeps notification rows attached between screen-off cycles. Reapply the
+            // platform's row effect when a reused background becomes visible again.
+            hook(View::class.java.getMethod("setVisibility", Int::class.javaPrimitiveType))
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .setId("notification-row-glass-on-visibility")
+                .intercept { chain ->
+                    val result = chain.proceed()
+                    val view = chain.thisObject as? View
+                    if (chain.getArg(0) == View.VISIBLE && view != null) {
+                        requestNotificationRowGlass(view, preferences, "visible")
+                    }
+                    result
+                }
+
+            hook(View::class.java.getMethod("onVisibilityAggregated", Boolean::class.javaPrimitiveType))
+                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                .setId("notification-row-glass-on-visibility-aggregated")
+                .intercept { chain ->
+                    val result = chain.proceed()
+                    val view = chain.thisObject as? View
+                    if (chain.getArg(0) == true && view != null) {
+                        requestNotificationRowGlass(view, preferences, "visible-aggregated")
                     }
                     result
                 }
@@ -596,7 +623,7 @@ class HyperSystemUiModule : XposedModule() {
                 .setId("shade-panel-background-radius")
                 .intercept { chain ->
                     val tuning = backgroundMaterialOverride(preferences)
-                    if (tuning?.enabled == true && isShadeBlurProviderCall()) {
+                    if (tuning?.enabled == true && isShadePanelBackgroundCall()) {
                         chain.proceedWith(
                             chain.thisObject,
                             arrayOf((chain.getArg(0) as Int) * tuning.blurPercent / 100),
@@ -614,7 +641,7 @@ class HyperSystemUiModule : XposedModule() {
                 .setId("shade-panel-background-scale")
                 .intercept { chain ->
                     val tuning = backgroundMaterialOverride(preferences)
-                    if (tuning?.enabled == true && isShadeBlurProviderCall()) {
+                    if (tuning?.enabled == true && isShadePanelBackgroundCall()) {
                         chain.proceedWith(
                             chain.thisObject,
                             arrayOf((chain.getArg(0) as Float) * tuning.scalePercent / 100f),
@@ -629,7 +656,7 @@ class HyperSystemUiModule : XposedModule() {
                     val tuning = backgroundMaterialOverride(preferences)
                     val original = chain.getArg(0) as? ArrayList<*>
                     if (tuning?.enabled == true && tuning.tintEnabled && tuning.tintStrength > 0 &&
-                        original != null && isShadeBlurProviderCall()
+                        original != null && isShadePanelBackgroundCall()
                     ) {
                         chain.proceedWith(
                             chain.thisObject,
@@ -844,13 +871,22 @@ class HyperSystemUiModule : XposedModule() {
         it.className.startsWith("miui.systemui.controlcenter.")
     }
 
-    private fun isNotificationCenterCall(): Boolean = Thread.currentThread().stackTrace.any {
-        it.className.startsWith("com.android.systemui.statusbar.notification.")
+    private fun isNotificationCenterCall(): Boolean {
+        val stack = Thread.currentThread().stackTrace
+        if (stack.any { it.className.startsWith("miui.systemui.controlcenter.") }) return false
+        return stack.any {
+            it.className.startsWith("com.android.systemui.statusbar.notification.") ||
+                it.className.startsWith("com.android.systemui.shade.") ||
+                it.className.startsWith("com.miui.systemui.shade.")
+        }
     }
 
     private fun isShadeBlurProviderCall(): Boolean = Thread.currentThread().stackTrace.any {
         it.className.startsWith("com.miui.systemui.shade.blur.ShadeBlendBlurController\$BlurProvider")
     }
+
+    private fun isShadePanelBackgroundCall(): Boolean =
+        isShadeBlurProviderCall() || isControlCenterCall() || isNotificationCenterCall()
 
     private fun stackContainsClass(classNamePart: String): Boolean =
         Thread.currentThread().stackTrace.any { it.className.contains(classNamePart, ignoreCase = true) }
@@ -883,18 +919,21 @@ class HyperSystemUiModule : XposedModule() {
 
     private fun elementMaterialOverride(
         preferences: SharedPreferences,
+        view: View?,
         controlCenter: Boolean,
         notification: Boolean,
     ): MaterialOverride? = when {
+        view != null && isNotificationRowBackground(view) ->
+            preferences.getMaterialOverride(KEY_NOTIFICATION_ELEMENTS_MATERIAL)
         controlCenter -> preferences.getMaterialOverride(KEY_CONTROL_CENTER_ELEMENTS_MATERIAL)
         notification -> preferences.getMaterialOverride(KEY_NOTIFICATION_ELEMENTS_MATERIAL)
         else -> null
     }
 
     private fun backgroundMaterialOverride(preferences: SharedPreferences): MaterialOverride? = when {
-        stackContainsClass("controlcenter") ->
+        isControlCenterCall() ->
             preferences.getMaterialOverride(KEY_CONTROL_CENTER_BACKGROUND_MATERIAL)
-        stackContainsClass("notification") || isShadeBlurProviderCall() ->
+        isNotificationCenterCall() || isShadeBlurProviderCall() ->
             preferences.getMaterialOverride(KEY_NOTIFICATION_CENTER_BACKGROUND_MATERIAL)
         else -> null
     }
@@ -1748,6 +1787,7 @@ class HyperSystemUiModule : XposedModule() {
         private const val SYSTEM_UI = "com.android.systemui"
         private const val SYSTEM_UI_PLUGIN = "miui.systemui.plugin"
         private const val AOD = "com.miui.aod"
+        private val SYSTEM_UI_TARGETS = setOf(SYSTEM_UI, SYSTEM_UI_PLUGIN, AOD)
         private const val DEPTH_EVALUATOR_CLASS =
             "com.miui.clock.utils.avoid.DepthAvoidEvaluator"
         private const val DEPTH_THRESHOLD_CLASS =
