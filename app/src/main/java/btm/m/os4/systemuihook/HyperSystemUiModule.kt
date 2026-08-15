@@ -7,6 +7,7 @@ import android.graphics.Outline
 import android.graphics.Point
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -17,10 +18,28 @@ import android.widget.ImageView
 import io.github.libxposed.api.XposedInterface.ExceptionMode
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+import java.lang.reflect.Method
 import java.util.Collections
 import java.util.WeakHashMap
 
 private enum class NotificationMaterialType { NORMAL, MEDIA, FOCUS }
+
+private data class NotificationGlassEffect(val instance: Any, val apply: Method)
+
+private data class ExpandedIslandMaterialApi(
+    val glassToken: Any,
+    val setBackgroundStyle: Method,
+    val setBlurRadius: Method,
+    val setBloomStroke: Method?,
+    val defaultBloomStrokeParameters: FloatArray?,
+)
+
+private data class ShadeMaterialSettings(
+    val notificationElements: MaterialOverride,
+    val controlCenterElements: MaterialOverride,
+    val notificationBackground: MaterialOverride,
+    val controlCenterBackground: MaterialOverride,
+)
 
 class HyperSystemUiModule : XposedModule() {
     override fun onPackageLoaded(param: PackageLoadedParam) {
@@ -241,8 +260,12 @@ class HyperSystemUiModule : XposedModule() {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .setId("dynamic-island-class-discovery")
                 .intercept { chain ->
+                    val requestedClass = chain.getArg(0) as? String
+                    val shouldInspect = requestedClass == DYNAMIC_ISLAND_BACKGROUND_CLASS ||
+                        requestedClass == PLUGIN_NOTIFICATION_SETTINGS_MANAGER_CLASS
                     val loadedClass = chain.proceed() as? Class<*> ?: return@intercept null
-                    if (loadedClass.name == DYNAMIC_ISLAND_BACKGROUND_CLASS && !dynamicIslandHooksInstalled) {
+                    if (!shouldInspect) return@intercept loadedClass
+                    if (requestedClass == DYNAMIC_ISLAND_BACKGROUND_CLASS && !dynamicIslandHooksInstalled) {
                         dynamicIslandHooksInstalled = true
                         loadedClass.classLoader?.let { pluginClassLoader ->
                             runCatching {
@@ -253,7 +276,7 @@ class HyperSystemUiModule : XposedModule() {
                             }
                         }
                     }
-                    if (loadedClass.name == PLUGIN_NOTIFICATION_SETTINGS_MANAGER_CLASS &&
+                    if (requestedClass == PLUGIN_NOTIFICATION_SETTINGS_MANAGER_CLASS &&
                         !focusIslandWhitelistPluginHooksInstalled
                     ) {
                         focusIslandWhitelistPluginHooksInstalled = true
@@ -377,7 +400,8 @@ class HyperSystemUiModule : XposedModule() {
         val largeBlur = preferences.getInt(KEY_EXPANDED_ISLAND_GLASS_LARGE_BLUR_RADIUS, 10).coerceIn(0, 10)
         val selfBlur = preferences.getInt(KEY_EXPANDED_ISLAND_SELF_BLUR_RADIUS, 0).coerceIn(0, 10)
         val highlight = preferences.getBoolean(KEY_EXPANDED_ISLAND_SHOW_HIGHLIGHT, false)
-        val configuration = listOf(opacity, smallBlur, largeBlur, selfBlur, highlight).hashCode()
+        val configuration = (((opacity * 31 + smallBlur) * 31 + largeBlur) * 31 + selfBlur) * 31 +
+            if (highlight) 1 else 0
         if (expandedIslandMaterialSettings[view] == configuration) return
         val drawable = runCatching {
             view.javaClass.getMethod("getDrawable").invoke(view) as? Drawable
@@ -386,41 +410,52 @@ class HyperSystemUiModule : XposedModule() {
             drawableValue.alpha = opacity * 255 / 100
         }
         runCatching {
-            val style = classLoader.loadClass(MI_BACKGROUND_STYLE_CLASS)
-            val instance = style.getField("INSTANCE").get(null)
-            val glassToken = style.getMethod("getDEFAULT_GLASS_TOKEN").invoke(instance)
+            val api = expandedIslandMaterialApiFor(classLoader) ?: return@runCatching
             // This public entry point applies the material type and registers the view with
             // HyperOS's Glass renderer before the lower-level radius parameters are changed.
-            style.methods
-                .first { it.name == "setMiBackgroundStyle" && it.parameterCount == 3 }
-                .invoke(null, view, null, glassToken)
-
-            val blurUtils = classLoader.loadClass(MIUI_BLUR_UTILS_CLASS)
-            blurUtils.getMethod(
-                "setMiGlassBlurRadius",
-                View::class.java,
-                Int::class.javaPrimitiveType,
-                Int::class.javaPrimitiveType,
-            ).invoke(
-                null,
-                view,
-                smallBlur,
-                largeBlur,
-            )
-
-            if (highlight) {
-                val params = style.getDeclaredField("defaultBloomStrokeParams").apply { isAccessible = true }
-                    .get(null) as FloatArray
-                style.getMethod("setMiBloomStrokeCompat", View::class.java, FloatArray::class.java)
-                    .invoke(null, view, params.clone())
+            api.setBackgroundStyle.invoke(null, view, null, api.glassToken)
+            api.setBlurRadius.invoke(null, view, smallBlur, largeBlur)
+            if (highlight && api.setBloomStroke != null && api.defaultBloomStrokeParameters != null) {
+                api.setBloomStroke.invoke(null, view, api.defaultBloomStrokeParameters.clone())
             }
             view.invalidate()
             expandedIslandMaterialSettings[view] = configuration
-            log(Log.DEBUG, TAG, "Applied expanded island glass: opacity=$opacity")
         }.onFailure { error ->
             log(Log.ERROR, TAG, "Could not apply expanded island glass", error)
         }
     }
+
+    private fun expandedIslandMaterialApiFor(classLoader: ClassLoader): ExpandedIslandMaterialApi? =
+        expandedIslandMaterialApis[classLoader] ?: runCatching {
+            val style = classLoader.loadClass(MI_BACKGROUND_STYLE_CLASS)
+            val instance = style.getField("INSTANCE").get(null)
+            val glassToken = style.getMethod("getDEFAULT_GLASS_TOKEN").invoke(instance)
+                ?: return@runCatching null
+            val setBackgroundStyle = style.methods.first {
+                it.name == "setMiBackgroundStyle" && it.parameterCount == 3
+            }
+            val blurUtils = classLoader.loadClass(MIUI_BLUR_UTILS_CLASS)
+            val setBlurRadius = blurUtils.getMethod(
+                "setMiGlassBlurRadius",
+                View::class.java,
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+            )
+            val setBloomStroke = runCatching {
+                style.getMethod("setMiBloomStrokeCompat", View::class.java, FloatArray::class.java)
+            }.getOrNull()
+            val bloomParameters = runCatching {
+                style.getDeclaredField("defaultBloomStrokeParams").apply { isAccessible = true }
+                    .get(null) as FloatArray
+            }.getOrNull()
+            ExpandedIslandMaterialApi(
+                glassToken,
+                setBackgroundStyle,
+                setBlurRadius,
+                setBloomStroke,
+                bloomParameters,
+            ).also { expandedIslandMaterialApis[classLoader] = it }
+        }.getOrNull()
 
     private fun findDynamicIslandBackground(view: View): View? {
         val root = findViewRoot(view)
@@ -455,9 +490,7 @@ class HyperSystemUiModule : XposedModule() {
                 .setId("shade-notification-glass-material")
                 .intercept { chain ->
                     val original = chain.getArg(0) as? FloatArray
-                    val controlCenter = isControlCenterCall()
-                    val notification = isNotificationCenterCall()
-                    val tuning = elementMaterialOverride(preferences, controlCenter, notification)
+                    val tuning = elementMaterialOverrideForCurrentCall(preferences)
                     if (original != null && original.size >= MIN_GLASS_PARAMS_SIZE && tuning?.enabled == true) {
                         chain.proceedWith(chain.thisObject, arrayOf(applyMaterialOverride(original, tuning)))
                     } else {
@@ -474,11 +507,7 @@ class HyperSystemUiModule : XposedModule() {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .setId("shade-notification-glass-radius")
                 .intercept { chain ->
-                    val tuning = elementMaterialOverride(
-                        preferences,
-                        isControlCenterCall(),
-                        isNotificationCenterCall(),
-                    )
+                    val tuning = elementMaterialOverrideForCurrentCall(preferences)
                     if (tuning?.enabled == true && tuning.glassRadius > 0) {
                         chain.proceedWith(
                             chain.thisObject,
@@ -595,8 +624,8 @@ class HyperSystemUiModule : XposedModule() {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .setId("shade-panel-background-radius")
                 .intercept { chain ->
-                    val tuning = backgroundMaterialOverride(preferences)
-                    if (tuning?.enabled == true && isShadeBlurProviderCall()) {
+                    val tuning = shadeBackgroundMaterialOverrideForCurrentCall(preferences)
+                    if (tuning?.enabled == true) {
                         chain.proceedWith(
                             chain.thisObject,
                             arrayOf((chain.getArg(0) as Int) * tuning.blurPercent / 100),
@@ -613,8 +642,8 @@ class HyperSystemUiModule : XposedModule() {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .setId("shade-panel-background-scale")
                 .intercept { chain ->
-                    val tuning = backgroundMaterialOverride(preferences)
-                    if (tuning?.enabled == true && isShadeBlurProviderCall()) {
+                    val tuning = shadeBackgroundMaterialOverrideForCurrentCall(preferences)
+                    if (tuning?.enabled == true) {
                         chain.proceedWith(
                             chain.thisObject,
                             arrayOf((chain.getArg(0) as Float) * tuning.scalePercent / 100f),
@@ -626,10 +655,10 @@ class HyperSystemUiModule : XposedModule() {
                 .setExceptionMode(ExceptionMode.PROTECTIVE)
                 .setId("shade-panel-background-tint")
                 .intercept { chain ->
-                    val tuning = backgroundMaterialOverride(preferences)
+                    val tuning = shadeBackgroundMaterialOverrideForCurrentCall(preferences)
                     val original = chain.getArg(0) as? ArrayList<*>
                     if (tuning?.enabled == true && tuning.tintEnabled && tuning.tintStrength > 0 &&
-                        original != null && isShadeBlurProviderCall()
+                        original != null
                     ) {
                         chain.proceedWith(
                             chain.thisObject,
@@ -760,10 +789,15 @@ class HyperSystemUiModule : XposedModule() {
         }
         applySystemNotificationRowGlass(view, source)
         // Notification backgrounds can be attached before their parent row has finished
-        // binding.  One posted retry covers that lifecycle without permanent listeners.
+        // binding. Coalesce retries so repeated background updates cannot build a queue.
+        if (!notificationGlassRetryScheduled.add(view)) return
         view.post {
-            if (view.isAttachedToWindow && notificationMaterialEnabled(preferences)) {
-                applySystemNotificationRowGlass(view, "$source-post")
+            try {
+                if (view.isAttachedToWindow && notificationMaterialEnabled(preferences)) {
+                    applySystemNotificationRowGlass(view, "$source-post")
+                }
+            } finally {
+                notificationGlassRetryScheduled.remove(view)
             }
         }
     }
@@ -776,17 +810,9 @@ class HyperSystemUiModule : XposedModule() {
                 .filterIsInstance<View>()
                 .firstOrNull { it.javaClass.name.contains("ExpandableNotificationRow") }
                 ?: return
-            val effectClass = row.javaClass.classLoader.loadClass(NOTIFICATION_ROW_GLASS_EFFECT_CLASS)
-            val instance = effectClass.fields.firstOrNull { it.name == "INSTANCE" }?.get(null)
-                ?: effectClass.declaredFields.firstOrNull { it.name == "INSTANCE" }
-                    ?.apply { isAccessible = true }
-                    ?.get(null)
-                ?: return
-            val apply = effectClass.methods.firstOrNull {
-                it.name == "apply" && it.parameterCount == 2
-            } ?: return
-            apply.invoke(instance, row, background.context)
-            log(Log.DEBUG, TAG, "Applied system notification glass through $source")
+            val classLoader = row.javaClass.classLoader ?: return
+            val effect = notificationGlassEffectFor(classLoader) ?: return
+            effect.apply.invoke(effect.instance, row, background.context)
         } catch (error: Throwable) {
             log(Log.ERROR, TAG, "Could not apply system notification glass", error)
         } finally {
@@ -881,26 +907,87 @@ class HyperSystemUiModule : XposedModule() {
         return tuned
     }
 
-    private fun elementMaterialOverride(
-        preferences: SharedPreferences,
-        controlCenter: Boolean,
-        notification: Boolean,
-    ): MaterialOverride? = when {
-        controlCenter -> preferences.getMaterialOverride(KEY_CONTROL_CENTER_ELEMENTS_MATERIAL)
-        notification -> preferences.getMaterialOverride(KEY_NOTIFICATION_ELEMENTS_MATERIAL)
-        else -> null
+    private fun elementMaterialOverrideForCurrentCall(preferences: SharedPreferences): MaterialOverride? {
+        val settings = shadeMaterialSettings(preferences)
+        if (!settings.controlCenterElements.enabled && !settings.notificationElements.enabled) return null
+        var notification = false
+        Thread.currentThread().stackTrace.forEach { frame ->
+            when {
+                frame.className.startsWith("miui.systemui.controlcenter.") ->
+                    return settings.controlCenterElements
+                frame.className.startsWith("com.android.systemui.statusbar.notification.") ->
+                    notification = true
+            }
+        }
+        return if (notification) {
+            settings.notificationElements
+        } else {
+            null
+        }
     }
 
-    private fun backgroundMaterialOverride(preferences: SharedPreferences): MaterialOverride? = when {
-        stackContainsClass("controlcenter") ->
-            preferences.getMaterialOverride(KEY_CONTROL_CENTER_BACKGROUND_MATERIAL)
-        stackContainsClass("notification") || isShadeBlurProviderCall() ->
-            preferences.getMaterialOverride(KEY_NOTIFICATION_CENTER_BACKGROUND_MATERIAL)
-        else -> null
+    private fun shadeBackgroundMaterialOverrideForCurrentCall(
+        preferences: SharedPreferences,
+    ): MaterialOverride? {
+        val settings = shadeMaterialSettings(preferences)
+        if (!settings.controlCenterBackground.enabled && !settings.notificationBackground.enabled) return null
+        var isBlurProvider = false
+        var controlCenter = false
+        Thread.currentThread().stackTrace.forEach { frame ->
+            val className = frame.className
+            if (className.startsWith("com.miui.systemui.shade.blur.ShadeBlendBlurController\$BlurProvider")) {
+                isBlurProvider = true
+            }
+            when {
+                className.contains("controlcenter", ignoreCase = true) -> controlCenter = true
+            }
+        }
+        if (!isBlurProvider) return null
+        return if (controlCenter) {
+            settings.controlCenterBackground
+        } else {
+            settings.notificationBackground
+        }
     }
+
+    private fun notificationGlassEffectFor(classLoader: ClassLoader): NotificationGlassEffect? =
+        notificationGlassEffects[classLoader] ?: runCatching {
+            val effectClass = classLoader.loadClass(NOTIFICATION_ROW_GLASS_EFFECT_CLASS)
+            val instance = effectClass.fields.firstOrNull { it.name == "INSTANCE" }?.get(null)
+                ?: effectClass.declaredFields.firstOrNull { it.name == "INSTANCE" }
+                    ?.apply { isAccessible = true }
+                    ?.get(null)
+                ?: return@runCatching null
+            val apply = effectClass.methods.firstOrNull {
+                it.name == "apply" && it.parameterCount == 2
+            } ?: return@runCatching null
+            NotificationGlassEffect(instance, apply).also { notificationGlassEffects[classLoader] = it }
+        }.getOrNull()
 
     private fun notificationMaterialEnabled(preferences: SharedPreferences): Boolean =
-        preferences.getMaterialOverride(KEY_NOTIFICATION_ELEMENTS_MATERIAL).enabled
+        shadeMaterialSettings(preferences).notificationElements.enabled
+
+    private fun shadeMaterialSettings(preferences: SharedPreferences): ShadeMaterialSettings {
+        val now = SystemClock.uptimeMillis()
+        val cached = cachedShadeMaterialSettings
+        if (cached != null && now - cachedShadeMaterialSettingsAt < SHADE_SETTINGS_CACHE_MS) return cached
+        synchronized(shadeMaterialSettingsLock) {
+            val refreshedAt = SystemClock.uptimeMillis()
+            val current = cachedShadeMaterialSettings
+            if (current != null && refreshedAt - cachedShadeMaterialSettingsAt < SHADE_SETTINGS_CACHE_MS) {
+                return current
+            }
+            return ShadeMaterialSettings(
+                preferences.getMaterialOverride(KEY_NOTIFICATION_ELEMENTS_MATERIAL),
+                preferences.getMaterialOverride(KEY_CONTROL_CENTER_ELEMENTS_MATERIAL),
+                preferences.getMaterialOverride(KEY_NOTIFICATION_CENTER_BACKGROUND_MATERIAL),
+                preferences.getMaterialOverride(KEY_CONTROL_CENTER_BACKGROUND_MATERIAL),
+            ).also {
+                cachedShadeMaterialSettings = it
+                cachedShadeMaterialSettingsAt = refreshedAt
+            }
+        }
+    }
 
     private fun applyMaterialOverride(original: FloatArray, tuning: MaterialOverride): FloatArray = original.clone().apply {
         this[6] += tuning.brightness / 100f
@@ -1547,8 +1634,13 @@ class HyperSystemUiModule : XposedModule() {
             .setExceptionMode(ExceptionMode.PROTECTIVE)
             .setId("control-center-class-discovery")
             .intercept { chain ->
+                val requestedClass = chain.getArg(0) as? String
+                val isCornerTarget = requestedClass == TOP_BUTTONS_CLASS ||
+                    requestedClass == MEDIA_PANEL_CLASS ||
+                    requestedClass == DEVICE_CENTER_ENTRY ||
+                    requestedClass == MI_BACKGROUND_STYLE_CLASS
                 val loadedClass = chain.proceed() as? Class<*> ?: return@intercept null
-                installLoadedCornerRadiusHook(loadedClass, preferences)
+                if (isCornerTarget) installLoadedCornerRadiusHook(loadedClass, preferences)
                 loadedClass
             }
 
@@ -1712,9 +1804,16 @@ class HyperSystemUiModule : XposedModule() {
         else -> null
     }
 
-    private fun Resources.entryName(resourceId: Int): String? = runCatching {
-        getResourceEntryName(resourceId)
-    }.getOrNull()
+    private fun Resources.entryName(resourceId: Int): String? = synchronized(dimensionEntryNames) {
+        val names = dimensionEntryNames.getOrPut(this) { HashMap() }
+        if (names.containsKey(resourceId)) {
+            names[resourceId]
+        } else {
+            runCatching { getResourceEntryName(resourceId) }.getOrNull().also {
+                names[resourceId] = it
+            }
+        }
+    }
 
     private fun dpToPixels(view: View, value: Float): Float =
         value.coerceIn(0f, 60f) * view.resources.displayMetrics.density
@@ -1815,6 +1914,7 @@ class HyperSystemUiModule : XposedModule() {
             "miui.systemui.controlcenter.panel.main.devicecenter.entry.DeviceCenterEntryFrameLayout"
         private const val DEFAULT_CORNER_RADIUS = 24f
         private const val MIN_GLASS_PARAMS_SIZE = 36
+        private const val SHADE_SETTINGS_CACHE_MS = 250L
         private const val GLASS_TINT_RED_INDEX = 11
         private const val GLASS_TINT_GREEN_INDEX = 12
         private const val GLASS_TINT_BLUE_INDEX = 13
@@ -1943,6 +2043,17 @@ class HyperSystemUiModule : XposedModule() {
         private var focusIslandWhitelistSystemUiHooksInstalled = false
         private var focusIslandWhitelistPluginHooksInstalled = false
         private val notificationGlassApplying = ThreadLocal<Boolean>()
+        private val notificationGlassRetryScheduled = Collections.newSetFromMap(
+            Collections.synchronizedMap(WeakHashMap<View, Boolean>()),
+        )
+        private val notificationGlassEffects =
+            Collections.synchronizedMap(WeakHashMap<ClassLoader, NotificationGlassEffect>())
+        private val expandedIslandMaterialApis =
+            Collections.synchronizedMap(WeakHashMap<ClassLoader, ExpandedIslandMaterialApi>())
+        private val dimensionEntryNames = WeakHashMap<Resources, MutableMap<Int, String?>>()
+        private val shadeMaterialSettingsLock = Any()
+        @Volatile private var cachedShadeMaterialSettings: ShadeMaterialSettings? = null
+        @Volatile private var cachedShadeMaterialSettingsAt = 0L
         private val controlCenterMaterialHits = Collections.synchronizedSet(mutableSetOf<String>())
         private val expandedIslandMaterialSettings =
             Collections.synchronizedMap(WeakHashMap<View, Int>())

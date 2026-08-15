@@ -1,8 +1,10 @@
 package btm.m.liquidglass.hook
 
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.ViewTreeObserver
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.spring
@@ -29,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.derivedStateOf
@@ -128,6 +131,38 @@ data class MusicMiniPlayerState(
 private class NativeViewMiuixBackdrop(
     private val sourceView: View
 ) : MiuixBackdrop {
+    private var snapshot: Bitmap? = null
+    private var snapshotCanvas: android.graphics.Canvas? = null
+    private var dirty = true
+
+    fun markDirty() {
+        dirty = true
+    }
+
+    fun dispose() {
+        snapshot?.recycle()
+        snapshot = null
+        snapshotCanvas = null
+    }
+
+    private fun ensureSnapshot(): Bitmap? {
+        if (!sourceView.isAttachedToWindow || sourceView.width <= 0 || sourceView.height <= 0) return null
+        val current = snapshot
+        if (current == null || current.width != sourceView.width || current.height != sourceView.height) {
+            current?.recycle()
+            snapshot = Bitmap.createBitmap(sourceView.width, sourceView.height, Bitmap.Config.ARGB_8888)
+            snapshotCanvas = android.graphics.Canvas(snapshot!!)
+            dirty = true
+        }
+        if (dirty) {
+            val bitmap = snapshot ?: return null
+            bitmap.eraseColor(android.graphics.Color.TRANSPARENT)
+            sourceView.draw(snapshotCanvas ?: android.graphics.Canvas(bitmap))
+            dirty = false
+        }
+        return snapshot
+    }
+
     override val isCoordinatesDependent: Boolean = true
 
     override fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBackdrop(
@@ -137,7 +172,7 @@ private class NativeViewMiuixBackdrop(
         downscaleFactor: Int
     ) {
         val surfacePosition = coordinates?.positionInWindow() ?: return
-        if (!sourceView.isAttachedToWindow || sourceView.width <= 0 || sourceView.height <= 0) return
+        val snapshot = ensureSnapshot() ?: return
         val sourcePosition = IntArray(2).also(sourceView::getLocationInWindow)
         val canvas = drawContext.canvas.nativeCanvas
         canvas.save()
@@ -148,7 +183,7 @@ private class NativeViewMiuixBackdrop(
                 sourcePosition[0] - surfacePosition.x,
                 sourcePosition[1] - surfacePosition.y
             )
-            sourceView.draw(canvas)
+            canvas.drawBitmap(snapshot, 0f, 0f, null)
         } finally {
             canvas.restore()
         }
@@ -561,6 +596,18 @@ fun NativeBackdropMusicMiniPlayer(
     var backdropRefreshEpoch by remember { mutableIntStateOf(0) }
     val backdrop = remember(sourceView, backdropRefreshEpoch) {
         NativeViewMiuixBackdrop(sourceView)
+    }
+    DisposableEffect(sourceView, backdrop) {
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            if (sourceView.isDirty) backdrop.markDirty()
+            true
+        }
+        sourceView.viewTreeObserver.addOnPreDrawListener(listener)
+        onDispose {
+            val observer = sourceView.viewTreeObserver
+            if (observer.isAlive) observer.removeOnPreDrawListener(listener)
+            backdrop.dispose()
+        }
     }
     val liquidBackdrop = rememberNativeViewBackdrop(sourceView, {}, true)
     val density = LocalDensity.current
