@@ -402,7 +402,7 @@ private fun BottomBar(
 }
 
 @Composable
-private fun CategoryHome(open: (PageId) -> Unit) = AppPage("OS4 Changer") { padding, scroll ->
+private fun CategoryHome(open: (PageId) -> Unit) = AppPage("HyperChanger") { padding, scroll ->
     AppList(padding, scroll) {
         item { Entry("\u901a\u77e5\u4e2d\u5fc3\u4e0e\u63a7\u5236\u4e2d\u5fc3") { open(PageId.SHADE) } }
         item { Entry("\u8d85\u7ea7\u5c9b") { open(PageId.ISLAND) } }
@@ -1370,11 +1370,11 @@ private fun About(back: () -> Unit) = AppPage("\u5173\u4e8e", back) { padding, s
     AppList(padding, scroll, 28) {
         item {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
-                Image(painterResource(R.drawable.ic_os4changer_full), "OS4 Changer", Modifier.size(72.dp), contentScale = ContentScale.Fit)
-                Text("OS4 Changer", style = MiuixTheme.textStyles.title1, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp))
+                Image(painterResource(R.drawable.ic_hyperchanger_full), "HyperChanger", Modifier.size(72.dp), contentScale = ContentScale.Fit)
+                Text("HyperChanger", style = MiuixTheme.textStyles.title1, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp))
                 Text("\u4e00\u4e2a\u4e34\u65f6\u7528\u4e8e\u89e3\u9501\u5c0f\u7c73\u6f8e\u6e43 OS 4 Beta \u7248\u9650\u5236\u7684\u6a21\u5757\u3002", style = MiuixTheme.textStyles.body1, modifier = Modifier.padding(top = 6.dp))
                 Box(Modifier.fillMaxWidth().padding(vertical = 14.dp).height(1.dp).background(MiuixTheme.colorScheme.outline.copy(alpha = .22f)))
-                Text("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MiuixTheme.textStyles.body2)
+                Text(BuildConfig.VERSION_NAME, style = MiuixTheme.textStyles.body2)
             }
         }
         item {
@@ -1389,7 +1389,7 @@ private fun About(back: () -> Unit) = AppPage("\u5173\u4e8e", back) { padding, s
                 }
             }
         }
-        item { Card(Modifier.fillMaxWidth()) { Text("\u672c\u9879\u76ee\u57fa\u4e8e MIT \u534f\u8bae\u5f00\u6e90", style = MiuixTheme.textStyles.body1, modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)); ArrowPreference(title = "GitHub Repository", summary = "github.com/ColdP/OS4Changer", onClick = { openUrl(context, "https://github.com/ColdP/OS4Changer") }) } }
+        item { Card(Modifier.fillMaxWidth()) { Text("\u672c\u9879\u76ee\u57fa\u4e8e MIT \u534f\u8bae\u5f00\u6e90", style = MiuixTheme.textStyles.body1, modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)); ArrowPreference(title = "GitHub Repository", summary = "github.com/ColdP/HyperChanger", onClick = { openUrl(context, "https://github.com/ColdP/HyperChanger") }) } }
         item { Text("\u00a9 ${Year.now().value} btm_m", style = MiuixTheme.textStyles.body2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = .56f), modifier = Modifier.padding(start = 12.dp)) }
     }
 }
@@ -1417,7 +1417,7 @@ private val openProjects = listOf(
 private fun OpenSource(back: () -> Unit) = AppPage("\u5f00\u6e90\u4ee3\u7801\u58f0\u660e", back) { padding, scroll ->
     val context = LocalContext.current
     AppList(padding, scroll, 28) {
-        item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) { Text("OS4 Changer \u4f7f\u7528\u4e86\u4ee5\u4e0b\u5f00\u6e90\u9879\u76ee\u3002\u611f\u8c22\u6240\u6709\u9879\u76ee\u4f5c\u8005\u4e0e\u8d21\u732e\u8005\u3002", style = MiuixTheme.textStyles.body1) } }
+        item { Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) { Text("HyperChanger \u4f7f\u7528\u4e86\u4ee5\u4e0b\u5f00\u6e90\u9879\u76ee\u3002\u611f\u8c22\u6240\u6709\u9879\u76ee\u4f5c\u8005\u4e0e\u8d21\u732e\u8005\u3002", style = MiuixTheme.textStyles.body1) } }
         item { SmallTitle("\u754c\u9762\u3001\u529f\u80fd\u4e0e\u5e73\u53f0", insideMargin = PaddingValues(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 4.dp)) }
         items(openProjects.size) { i -> val item = openProjects[i]; Card(Modifier.fillMaxWidth().clickable { openUrl(context, item.url) }, insideMargin = PaddingValues(16.dp)) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.name, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Bold); Text("${item.version} \u00b7 Apache License 2.0", style = MiuixTheme.textStyles.body2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.padding(top = 3.dp)); Text(item.description, style = MiuixTheme.textStyles.body2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.padding(top = 6.dp)) }; Image(MiuixIcons.Regular.ChevronForward, null, Modifier.padding(start = 12.dp).size(22.dp), colorFilter = ColorFilter.tint(MiuixTheme.colorScheme.onSurfaceVariantSummary)) } } }
     }

@@ -1850,7 +1850,7 @@ class HyperSystemUiModule : XposedModule() {
         private const val SHORTCUT_ICON_COLOR_AUTO = 0
         private const val SHORTCUT_ICON_COLOR_LIGHT = 1
         private const val SHORTCUT_ICON_COLOR_DARK = 2
-        private const val SHORTCUT_GLASS_TAG = "os4changer.lockscreen.shortcut.glass"
+        private const val SHORTCUT_GLASS_TAG = "hyperchanger.lockscreen.shortcut.glass"
         private val LOCKSCREEN_SHORTCUT_CONTAINER_IDS = setOf(
             "shortcut_view_left_layout",
             "shortcut_view_right_layout",

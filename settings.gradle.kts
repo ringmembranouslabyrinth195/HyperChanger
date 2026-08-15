@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "HyperSystemUIHook"
+rootProject.name = "HyperChanger"
 include(":app")

@@ -418,7 +418,7 @@ private fun MaterialOverride.serialize(): String = listOf(
 ).joinToString("|")
 
 fun HookSettings.exportShadePreset(name: String? = null): String = JSONObject().apply {
-    put("format", "os4changer-shade-preset")
+    put("format", "hyperchanger-shade-preset")
     put("version", 2)
     name?.trim()?.takeIf { it.isNotBlank() }?.let { put("name", it.take(MAX_PRESET_NAME_LENGTH)) }
     put("notificationElements", notificationElementsMaterial.serialize())
@@ -439,7 +439,7 @@ fun HookSettings.importShadePreset(payload: String): HookSettings {
 
 fun parseShadePreset(payload: String): ShadePresetImport {
     val preset = JSONObject(payload)
-    require(preset.optString("format") == "os4changer-shade-preset") { "不支持的预设文件" }
+    require(preset.optString("format") == "hyperchanger-shade-preset") { "不支持的预设文件" }
     require(preset.optInt("version", 0) == 2) { "不支持的预设版本" }
     fun value(key: String): String? = if (preset.has(key)) preset.getString(key) else null
     return ShadePresetImport(

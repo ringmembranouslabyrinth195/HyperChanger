@@ -14,10 +14,10 @@ android {
 
     defaultConfig {
         applicationId = "btm.m.os4.systemuihook"
-        minSdk = 26
+        minSdk = 33
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 10000
+        versionName = "1.0.0 Beta (10000-Beta)"
     }
 
     signingConfigs {
